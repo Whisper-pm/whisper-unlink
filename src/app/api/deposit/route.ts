@@ -1,27 +1,76 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  createUnlink,
+  unlinkAccount,
+  unlinkEvm,
+} from "@unlink-xyz/sdk";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  formatUnits,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
 import { CONFIG } from "@/lib/config";
+import crypto from "crypto";
 
-// Deposit USDC into Unlink privacy pool
-// In production: this triggers the real SDK flow server-side
+// Real deposit into Unlink privacy pool
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { amount, walletAddress } = body;
+  const { amount, evmPrivateKey } = body;
 
-  if (!amount || !walletAddress) {
-    return NextResponse.json({ error: "Missing amount or walletAddress" }, { status: 400 });
+  if (!amount || !evmPrivateKey) {
+    return NextResponse.json({ error: "Missing amount or evmPrivateKey" }, { status: 400 });
   }
 
-  // In production: use Unlink SDK server-side
-  // const client = await createServerClient({ evmPrivateKey, seed, apiKey });
-  // await ensureApproval(client);
-  // const result = await deposit(client, amount);
+  try {
+    const account = privateKeyToAccount(evmPrivateKey as `0x${string}`);
+    const walletClient = createWalletClient({ account, chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
+    const publicClient = createPublicClient({ chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
 
-  return NextResponse.json({
-    success: true,
-    action: "deposit",
-    amount,
-    pool: CONFIG.unlink.pool,
-    status: "queued",
-    message: "USDC will be deposited into Unlink privacy pool on Base Sepolia",
-  });
+    const seed = crypto.createHash("sha512").update("whisper:" + account.address).digest();
+    const unlink = createUnlink({
+      engineUrl: CONFIG.unlink.engineUrl,
+      apiKey: CONFIG.unlink.apiKey,
+      account: unlinkAccount.fromSeed({ seed: new Uint8Array(seed) }),
+      evm: unlinkEvm.fromViem({ walletClient: walletClient as any, publicClient: publicClient as any }),
+    });
+
+    await unlink.ensureRegistered();
+
+    // Ensure approval
+    await unlink.ensureErc20Approval({
+      token: CONFIG.unlink.usdc,
+      amount: "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    });
+
+    // Deposit
+    const result = await unlink.deposit({ token: CONFIG.unlink.usdc, amount });
+
+    // Wait for balance
+    await new Promise((r) => setTimeout(r, 8000));
+    const balances = await unlink.getBalances();
+    const usdcBal = ((balances as any).balances ?? []).find(
+      (b: any) => b.token?.toLowerCase() === CONFIG.unlink.usdc.toLowerCase()
+    );
+
+    // On-chain balance
+    const onChainBal = await publicClient.readContract({
+      address: CONFIG.unlink.usdc,
+      abi: [{ name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }],
+      functionName: "balanceOf",
+      args: [account.address],
+    });
+
+    return NextResponse.json({
+      success: true,
+      txId: result.txId,
+      status: result.status,
+      poolBalance: usdcBal ? formatUnits(BigInt(usdcBal.amount), 6) : "0",
+      walletBalance: formatUnits(onChainBal, 6),
+    });
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+  }
 }

@@ -13,11 +13,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rpContext = signRequest(CONFIG.worldId.action, signingKey);
+    const signed = signRequest(CONFIG.worldId.action, signingKey) as any;
     return NextResponse.json({
       rp_context: {
-        ...rpContext,
         rp_id: rpId,
+        nonce: signed.nonce,
+        created_at: signed.createdAt,
+        expires_at: signed.expiresAt,
+        signature: signed.sig,
       },
     });
   } catch (e: any) {

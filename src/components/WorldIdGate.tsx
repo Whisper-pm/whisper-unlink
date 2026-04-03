@@ -39,7 +39,7 @@ function RealWorldIdButton({ onSuccess, loading: parentLoading }: { onSuccess: (
       app_id: CONFIG.worldId.appId as `app_${string}`,
       action: CONFIG.worldId.action,
       preset: orbLegacy(),
-      rp_context: { rp_id: "", nonce: "", created_at: 0, expires_at: 0, signature: "" },
+      rp_context: { rp_id: "rp_placeholder", nonce: "0x00", created_at: Math.floor(Date.now()/1000), expires_at: Math.floor(Date.now()/1000) + 300, signature: "0x00" },
       allow_legacy_proofs: true,
     }
   );

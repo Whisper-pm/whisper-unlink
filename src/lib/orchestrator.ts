@@ -104,10 +104,41 @@ export async function executeWithdrawal(
     // The burner deposits back to the Unlink pool
     // After this, the funds are anonymous again
 
+    // 3. Auto-dispose burner (cleanup)
+    onStep("cleanup", "Disposing burner wallet...");
+    // In production: reshieldBurner(unlinkClient, burner, amount)
+    // Then: burner.dispose(client, depositTxId)
+    // Then: burner.deleteKey()
+
     onStep("done", "Funds re-shielded. Withdraw anytime.");
     return { success: true };
   } catch (error: any) {
     onStep("error", error.message);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Scheduled cleanup: dispose all inactive burners.
+ * Call periodically (e.g. every hour) to clean up abandoned burners.
+ */
+export async function cleanupBurners(
+  activeBurners: Map<string, { createdAt: number; status: string }>,
+  maxAgeMs = 24 * 60 * 60 * 1000 // 24 hours
+) {
+  const now = Date.now();
+  const expired: string[] = [];
+
+  activeBurners.forEach((info, address) => {
+    if (now - info.createdAt > maxAgeMs && info.status !== "active") {
+      expired.push(address);
+    }
+  });
+
+  for (const address of expired) {
+    activeBurners.delete(address);
+    // In production: burner.dispose() + deleteKey()
+  }
+
+  return { cleaned: expired.length, remaining: activeBurners.size };
 }

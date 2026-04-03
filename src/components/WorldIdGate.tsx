@@ -71,8 +71,6 @@ export function WorldIdGate({ children, onVerified }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isRealAppId = CONFIG.worldId.appId.startsWith("app_") && !CONFIG.worldId.appId.includes("staging");
-
   async function handleSuccess(proof: any) {
     if (loading || verified) return;
     setLoading(true);
@@ -117,21 +115,8 @@ export function WorldIdGate({ children, onVerified }: Props) {
       </div>
 
       <div className="flex flex-col gap-3 items-center">
-        {isRealAppId ? (
-          <RealWorldIdButton onSuccess={handleSuccess} loading={loading} />
-        ) : (
-          <button
-            onClick={() => handleSuccess({ nullifier_hash: "demo:" + Date.now() })}
-            disabled={loading}
-            className="bg-white text-black font-semibold px-10 py-3.5 rounded-full hover:bg-gray-100 transition disabled:opacity-50 shadow-lg"
-          >
-            {loading ? "Verifying..." : "Verify with World ID (Demo)"}
-          </button>
-        )}
-
-        {isRealAppId && (
-          <p className="text-xs text-green-600">World ID 4.0 active</p>
-        )}
+        <RealWorldIdButton onSuccess={handleSuccess} loading={loading} />
+        <p className="text-xs text-green-600">World ID 4.0</p>
       </div>
 
       {error && <p className="text-xs text-red-400 max-w-sm text-center">{error}</p>}

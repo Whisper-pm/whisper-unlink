@@ -33,7 +33,6 @@ function getNextNonce(wallet: string): string {
 const USDC_BASE = CONFIG.unlink.usdc;
 const USDC_AMOY = CONFIG.cctp.usdcPolygonAmoy;
 const TOKEN_MESSENGER = CONFIG.cctp.tokenMessenger;
-const TOKEN_MINTER = CONFIG.cctp.tokenMinter;
 const MSG_TRANSMITTER = CONFIG.cctp.messageTransmitter;
 const CTF = CONFIG.polymarket.amoy.ctf;
 const ZERO = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
@@ -119,31 +118,25 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================
-    // STEP 2: Withdraw to fresh burner + gas tank funds ETH
+    // STEP 2: Create burner + fund from pool (USDC + gas ETH)
+    // The Unlink relayer automatically sends gas ETH to the burner.
     // ============================================================
-    const burnerPk = ("0x" + crypto.randomBytes(32).toString("hex")) as `0x${string}`;
-    const burnerAccount = privateKeyToAccount(burnerPk);
-    const burnerAddress = burnerAccount.address;
+    log("burner", "started");
+    const burner = await BurnerWallet.create();
+    const burnerAddress = burner.address;
+    const burnerAccount = burner.toViemAccount();
+    log("burner", "created", undefined, burnerAddress);
 
-    log("withdraw", "started", undefined, `→ ${burnerAddress}`);
-    const wd = await unlink.withdraw({
-      recipientEvmAddress: burnerAddress,
+    const apiClient = createUnlinkClient(CONFIG.unlink.engineUrl, CONFIG.unlink.apiKey);
+    const unlinkKeys = await unlinkAcc.getAccountKeys();
+
+    const fundResult = await burner.fundFromPool(apiClient, {
+      senderKeys: unlinkKeys,
       token: USDC_BASE,
       amount: String(amountBigint),
+      environment: "base-sepolia",
     });
-    await unlink.pollTransactionStatus(wd.txId, { intervalMs: 2000, timeoutMs: 120000 });
-    log("withdraw", "done", undefined, wd.txId);
-
-    // Gas tank sends ETH to burner on Base for CCTP gas
-    log("gas:base", "started");
-    const gasTankBase = privateKeyToAccount(CONFIG.gasTank.privateKey);
-    const gasTankBaseWallet = createWalletClient({ account: gasTankBase, chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
-    const gasBaseTx = await gasTankBaseWallet.sendTransaction({
-      to: burnerAddress,
-      value: BigInt(CONFIG.gasTank.ethPerBurner),
-    });
-    await basePub.waitForTransactionReceipt({ hash: gasBaseTx });
-    log("gas:base", "done", gasBaseTx);
+    log("burner", "funded", undefined, `txId: ${fundResult.txId}`);
 
     addBurner({
       burnerAddress,
@@ -154,11 +147,21 @@ export async function POST(req: NextRequest) {
       side,
       amount: formatUnits(amountBigint, 6),
       status: "funded",
-      txHashes: { fundFromPool: wd.txId },
+      txHashes: { fundFromPool: fundResult.txId },
     });
 
-    // Wait for on-chain USDC
-    await new Promise((r) => setTimeout(r, 5000));
+    // Wait for USDC + gas ETH on-chain
+    log("burner", "waiting");
+    let burnerUsdc = 0n;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      burnerUsdc = (await basePub.readContract({ address: USDC_BASE, abi: erc20Abi, functionName: "balanceOf", args: [burnerAddress] })) as bigint;
+      const burnerEth = await basePub.getBalance({ address: burnerAddress });
+      if (burnerUsdc > 0n && burnerEth > 0n) {
+        log("burner", "ready", undefined, `${formatUnits(burnerUsdc, 6)} USDC + ${formatUnits(burnerEth, 18)} ETH`);
+        break;
+      }
+    }
 
     // ============================================================
     // STEP 3: CCTP Bridge Base → Polygon
@@ -166,14 +169,17 @@ export async function POST(req: NextRequest) {
     log("cctp:bridge", "started");
     const burnerBaseWallet = createWalletClient({ account: burnerAccount, chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
 
-    // Approve TokenMinter (for direct CCTP calls, approve Minter; for execute() it's Messenger)
-    await burnerBaseWallet.writeContract({ address: USDC_BASE, abi: erc20Abi, functionName: "approve", args: [TOKEN_MINTER, amountBigint] });
+    // Approve TokenMessenger for CCTP
+    const approveTx = await burnerBaseWallet.writeContract({ address: USDC_BASE, abi: erc20Abi, functionName: "approve", args: [TOKEN_MESSENGER, burnerUsdc] });
+    await basePub.waitForTransactionReceipt({ hash: approveTx });
 
-    // Burn
+    // Burn (get fresh nonce to avoid stale nonce after approve)
     const recipient = pad(burnerAddress as `0x${string}`, { size: 32 });
+    const burnNonce = await basePub.getTransactionCount({ address: burnerAddress });
     const burnTx = await burnerBaseWallet.writeContract({
       address: TOKEN_MESSENGER, abi: tmAbi, functionName: "depositForBurn",
-      args: [amountBigint, CONFIG.cctp.domains.polygonAmoy, recipient, USDC_BASE, ZERO, amountBigint / 50n, 1000],
+      args: [burnerUsdc, CONFIG.cctp.domains.polygonAmoy, recipient, USDC_BASE, ZERO, burnerUsdc / 50n, 1000],
+      nonce: burnNonce,
     });
     await basePub.waitForTransactionReceipt({ hash: burnTx });
     log("cctp:burn", "done", burnTx);
@@ -201,23 +207,23 @@ export async function POST(req: NextRequest) {
     log("cctp:attestation", "done");
 
     // ============================================================
-    // STEP 4: Gas tank relays receiveMessage + funds burner
+    // STEP 4: Relay receiveMessage + fund burner MATIC on Amoy
+    // Backend wallet relays the CCTP message and funds gas.
     // ============================================================
     log("cctp:relay", "started");
-    const gasTankAccount = privateKeyToAccount(CONFIG.gasTank.privateKey);
-    const gasTankWallet = createWalletClient({ account: gasTankAccount, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
+    const relayerWallet = createWalletClient({ account, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
 
-    const receiveTx = await gasTankWallet.writeContract({
+    const receiveTx = await relayerWallet.writeContract({
       address: MSG_TRANSMITTER, abi: mtAbi, functionName: "receiveMessage",
       args: [attestation.message as `0x${string}`, attestation.attestation as `0x${string}`],
     });
     await amoyPub.waitForTransactionReceipt({ hash: receiveTx });
     log("cctp:relay", "done", receiveTx);
 
-    // Fund burner with MATIC for gas
-    const gasTx = await gasTankWallet.sendTransaction({
+    // Fund burner with MATIC for Polymarket txs
+    const gasTx = await relayerWallet.sendTransaction({
       to: burnerAddress,
-      value: BigInt(CONFIG.gasTank.maticPerBurner),
+      value: 10000000000000000n, // 0.01 MATIC
     });
     await amoyPub.waitForTransactionReceipt({ hash: gasTx });
     log("gas:fund", "done", gasTx);
@@ -253,8 +259,10 @@ export async function POST(req: NextRequest) {
 
     // Split position (bet)
     log("polymarket:split", "started");
-    await burnerAmoyWallet.writeContract({ address: USDC_AMOY, abi: erc20Abi, functionName: "approve", args: [CTF, burnerAmoyBalance] });
-    const splitTx = await burnerAmoyWallet.writeContract({
+    const ctfApproveTx = await burnerAmoyWallet.writeContract({ address: USDC_AMOY, abi: erc20Abi, functionName: "approve", args: [CTF, burnerAmoyBalance] });
+    await amoyPub.waitForTransactionReceipt({ hash: ctfApproveTx });
+    const splitNonce = await amoyPub.getTransactionCount({ address: burnerAddress });
+    const splitTx = await burnerAmoyWallet.writeContract({ nonce: splitNonce,
       address: CTF, abi: ctfAbi, functionName: "splitPosition",
       args: [USDC_AMOY, ZERO, testnetConditionId, [1n, 2n], burnerAmoyBalance],
     });

@@ -69,13 +69,22 @@ export function LedgerInit() {
       const el = document.body.querySelector("ledger-button-app");
       if (el instanceof HTMLElement) {
         el.style.position = "fixed";
-        el.style.top = "50%";
-        el.style.left = "50%";
-        el.style.transform = "translate(-50%, -50%)";
-        el.style.width = "0";
-        el.style.height = "0";
-        el.style.overflow = "visible";
+        el.style.top = "0";
+        el.style.left = "0";
+        el.style.width = "100vw";
+        el.style.height = "100vh";
         el.style.zIndex = "999999";
+        el.style.pointerEvents = "none"; // transparent to clicks when no modal
+
+        // Watch for modal open/close to toggle pointer events
+        const observer = new MutationObserver(() => {
+          const hasModal = el.shadowRoot?.querySelector('[class*="modal"]') ||
+                          el.shadowRoot?.querySelector('[class*="overlay"]');
+          el.style.pointerEvents = hasModal ? "auto" : "none";
+        });
+        if (el.shadowRoot) {
+          observer.observe(el.shadowRoot, { childList: true, subtree: true });
+        }
       }
     });
 

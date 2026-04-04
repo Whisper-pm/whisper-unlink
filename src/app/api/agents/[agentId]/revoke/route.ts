@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revokeAgent } from "@/lib/agent-store";
 
 // POST /api/agents/[agentId]/revoke — Revoke an agent
-// Body: { nullifier } — only the authorizing human can revoke
+// Body: { address } — only the authorizing wallet can revoke
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -11,16 +11,16 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { nullifier } = body;
+    const { address } = body;
 
-    if (!nullifier) {
+    if (!address) {
       return NextResponse.json(
-        { error: "Missing nullifier — only the authorizing human can revoke" },
+        { error: "Missing address — only the authorizing wallet can revoke" },
         { status: 400 }
       );
     }
 
-    const result = revokeAgent(agentId, nullifier);
+    const result = revokeAgent(agentId, address);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 403 });

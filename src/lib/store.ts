@@ -21,7 +21,7 @@ export interface Bet {
 }
 
 export interface UserPortfolio {
-  nullifier: string;
+  address: string;
   bets: Bet[];
   totalPnl: number;
 }
@@ -37,7 +37,7 @@ export interface MarketSentiment {
 // ---------- JSON Persistence ----------
 
 interface StoreData {
-  [nullifier: string]: { bets: Bet[] };
+  [address: string]: { bets: Bet[] };
 }
 
 function loadStore(): Map<string, { bets: Bet[] }> {
@@ -64,18 +64,18 @@ function saveStore() {
   writeFileSync(STORE_PATH, JSON.stringify(obj, null, 2));
 }
 
-// Global store: nullifier -> portfolio data (loaded from disk)
+// Global store: address -> portfolio data (loaded from disk)
 const store = loadStore();
 
-function ensureUser(nullifier: string) {
-  if (!store.has(nullifier)) {
-    store.set(nullifier, { bets: [] });
+function ensureUser(address: string) {
+  if (!store.has(address)) {
+    store.set(address, { bets: [] });
   }
-  return store.get(nullifier)!;
+  return store.get(address)!;
 }
 
-export function addBet(nullifier: string, bet: Omit<Bet, "id" | "createdAt">): Bet {
-  const user = ensureUser(nullifier);
+export function addBet(address: string, bet: Omit<Bet, "id" | "createdAt">): Bet {
+  const user = ensureUser(address);
   const fullBet: Bet = {
     ...bet,
     id: `bet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -86,17 +86,17 @@ export function addBet(nullifier: string, bet: Omit<Bet, "id" | "createdAt">): B
   return fullBet;
 }
 
-export function getBets(nullifier: string): Bet[] {
-  return ensureUser(nullifier).bets;
+export function getBets(address: string): Bet[] {
+  return ensureUser(address).bets;
 }
 
 export function updateBetStatus(
-  nullifier: string,
+  address: string,
   betId: string,
   status: Bet["status"],
   pnl?: number
 ): Bet | null {
-  const user = ensureUser(nullifier);
+  const user = ensureUser(address);
   const bet = user.bets.find((b) => b.id === betId);
   if (!bet) return null;
   bet.status = status;
@@ -105,43 +105,43 @@ export function updateBetStatus(
   return bet;
 }
 
-export function getUserPortfolio(nullifier: string): UserPortfolio {
-  const user = ensureUser(nullifier);
+export function getUserPortfolio(address: string): UserPortfolio {
+  const user = ensureUser(address);
   const totalPnl = user.bets.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
   return {
-    nullifier,
+    address,
     bets: user.bets,
     totalPnl,
   };
 }
 
-// ---------- Sentiment: Sybil-Resistant Collective Intelligence ----------
+// ---------- Sentiment: Collective Intelligence ----------
 
 /**
- * Get verified human consensus for a specific market.
- * Counts unique nullifiers (not bets) to be truly sybil-resistant.
+ * Get consensus for a specific market.
+ * Counts unique addresses (not bets).
  */
 export function getMarketSentiment(conditionId: string): MarketSentiment {
-  const yesNullifiers = new Set<string>();
-  const noNullifiers = new Set<string>();
+  const yesAddresses = new Set<string>();
+  const noAddresses = new Set<string>();
 
-  for (const [nullifier, data] of store.entries()) {
+  for (const [address, data] of store.entries()) {
     for (const bet of data.bets) {
       if (bet.conditionId === conditionId) {
         // Only count the user's LATEST bet on this market
         if (bet.side === "YES") {
-          yesNullifiers.add(nullifier);
-          noNullifiers.delete(nullifier);
+          yesAddresses.add(address);
+          noAddresses.delete(address);
         } else {
-          noNullifiers.add(nullifier);
-          yesNullifiers.delete(nullifier);
+          noAddresses.add(address);
+          yesAddresses.delete(address);
         }
       }
     }
   }
 
-  const yesCount = yesNullifiers.size;
-  const noCount = noNullifiers.size;
+  const yesCount = yesAddresses.size;
+  const noCount = noAddresses.size;
   const totalHumans = yesCount + noCount;
   const yesPercent = totalHumans > 0 ? Math.round((yesCount / totalHumans) * 100) : 0;
 

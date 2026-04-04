@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBets } from "@/lib/store";
 
 // POST /api/ai-advice — Personalized AI advice based on user's betting history
-// Privacy-preserving: uses only nullifier, never real identity
+// Uses wallet address as the user identifier
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { nullifier, marketQuestion, marketAnalysis } = body;
+  const { address, marketQuestion, marketAnalysis } = body;
 
-  if (!nullifier) {
-    return NextResponse.json({ error: "Missing nullifier" }, { status: 400 });
+  if (!address) {
+    return NextResponse.json({ error: "Missing address" }, { status: 400 });
   }
 
   if (!marketQuestion) {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up user's betting history
-  const bets = getBets(nullifier);
+  const bets = getBets(address);
 
   // Compute stats from history
   const totalBets = bets.length;

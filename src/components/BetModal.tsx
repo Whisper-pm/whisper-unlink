@@ -23,7 +23,7 @@ interface AIAdvice {
 interface Props {
   market: ScoredMarket;
   side: "YES" | "NO";
-  nullifier?: string | null;
+  userAddress?: string | null;
   onClose: () => void;
   onConfirm: (amount: number) => void;
 }
@@ -50,7 +50,7 @@ function parseLiquidityString(liq: string): number {
   return num;
 }
 
-export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props) {
+export function BetModal({ market, side, userAddress, onClose, onConfirm }: Props) {
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<Step>("input");
   const [errorMsg, setErrorMsg] = useState("");
@@ -61,15 +61,15 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
   const sideColor = side === "YES" ? "text-green-400" : "text-red-400";
   const sideBg = side === "YES" ? "border-green-500/30" : "border-red-500/30";
 
-  // Fetch personalized AI advice when modal opens (if user is verified)
+  // Fetch personalized AI advice when modal opens (if user is connected)
   useEffect(() => {
-    if (!nullifier) return;
+    if (!userAddress) return;
     setAdviceLoading(true);
     fetch("/api/ai-advice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        nullifier,
+        address: userAddress,
         marketQuestion: raw.question,
         marketAnalysis: { risk: analysis.risk, score: analysis.score },
       }),
@@ -78,7 +78,7 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
       .then((data) => setAdvice(data))
       .catch(() => {})
       .finally(() => setAdviceLoading(false));
-  }, [nullifier, raw.question, analysis.risk, analysis.score]);
+  }, [userAddress, raw.question, analysis.risk, analysis.score]);
 
   // Build the Ledger clear sign preview fields from the ERC-7730 descriptor
   const clearSignFields = useMemo(() => {
@@ -172,7 +172,7 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
           evmPrivateKey: "0x0",
           ledgerSignature: ledgerResult?.signature,
           ledgerAddress,
-          nullifier: nullifier || undefined,
+          userAddress: userAddress || undefined,
           marketQuestion: raw.question,
           odds: analysis.odds,
         }),
@@ -221,8 +221,8 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
           </div>
         </div>
 
-        {/* Personalized AI Advice (World ID powered) */}
-        {step === "input" && nullifier && (
+        {/* Personalized AI Advice */}
+        {step === "input" && userAddress && (
           <PersonalizedAdvice advice={advice} loading={adviceLoading} />
         )}
 
@@ -425,7 +425,7 @@ function PersonalizedAdvice({ advice, loading }: { advice: AIAdvice | null; load
         <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">
           Personalized AI Advice
         </span>
-        <span className="text-[9px] text-gray-600 ml-auto">World ID + AI</span>
+        <span className="text-[9px] text-gray-600 ml-auto">Wallet + AI</span>
       </div>
 
       {/* Stats grid */}

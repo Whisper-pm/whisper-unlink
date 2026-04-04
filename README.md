@@ -6,21 +6,20 @@ AI-curated prediction markets with privacy, identity, and hardware security.
 
 ```
 User (Browser)
-  │
-  ├── World ID ──── Proof of personhood (1 human = 1 account)
-  ├── Ledger ────── ERC-7730 Clear Signing with AI analysis
-  └── MetaMask ──── EVM wallet (Base Sepolia)
-        │
-        ▼
+  |
+  |-- Wallet -------- EVM wallet via Reown/wagmi (user identifier)
+  |-- Ledger -------- ERC-7730 Clear Signing with AI analysis
+  |
+  v
   Unlink Privacy Pool (Base Sepolia)
-        │ withdraw to fresh burner (1 burner per bet)
-        ▼
+        | withdraw to fresh burner (1 burner per bet)
+        v
   Burner Wallet (Base Sepolia)
-        │ CCTP V2 bridge
-        ▼
+        | CCTP V2 bridge
+        v
   Burner Wallet (Polygon Amoy)
-        │ prepareCondition + splitPosition
-        ▼
+        | prepareCondition + splitPosition
+        v
   Polymarket CTF (Amoy testnet)
 ```
 
@@ -76,14 +75,14 @@ Future intent protocols (ERC-7683, cross-chain intents) could enable atomic cros
 
 ```
 OUTBOUND (4 steps, ~3-5 min):
-  1. Withdraw USDC from pool → fresh burner on Base (~13s)
+  1. Withdraw USDC from pool -> fresh burner on Base (~13s)
   2. Burner approves + burns USDC via CCTP (~5s)
   3. Wait for Circle attestation (~2-5 min)
   4. Receive USDC on Polygon + bet on CTF (~10s)
 
 RETURN (5 steps, ~3-5 min):
-  1. Redeem winning outcome tokens → USDC on Polygon
-  2. Approve + burn USDC via CCTP → Base
+  1. Redeem winning outcome tokens -> USDC on Polygon
+  2. Approve + burn USDC via CCTP -> Base
   3. Wait for Circle attestation (~2-5 min)
   4. Receive USDC on Base
   5. Deposit USDC back into Unlink pool (reshield)
@@ -97,17 +96,17 @@ RETURN (5 steps, ~3-5 min):
 |-------|-----------|---------|
 | AI | Mistral/Claude/Groq | Market analysis, thesis, catalysts, risk scoring |
 | Privacy | Unlink | ZK privacy pool, burner wallets, shielded balances |
-| Identity | World ID 4.0 | Proof of personhood, sybil resistance, agent authorization |
+| Identity | Wallet (Reown/wagmi) | User identification via connected wallet address |
 | Hardware | Ledger (ERC-7730) | Clear Signing with AI analysis on device screen |
 | Markets | Polymarket (Gamma API) | Real market data, CTF testnet for bets |
 | Bridge | Circle CCTP V2 | Base Sepolia <> Polygon Amoy cross-chain USDC |
-| Agents | Whisper Agent Platform | AI agents authorized by verified humans |
+| Agents | Whisper Agent Platform | AI agents authorized by wallet owners |
 
 ## Setup
 
 ```bash
 cp .env.example .env.local
-# Set: MISTRAL_API_KEY, WORLD_*, UNLINK_*
+# Set: MISTRAL_API_KEY, UNLINK_*
 npm install
 npm run dev
 ```
@@ -121,10 +120,8 @@ npm run dev
 | `/api/deposit` | POST | Deposit USDC to Unlink pool |
 | `/api/withdraw` | POST | Withdraw from pool |
 | `/api/bet/execute` | POST | Full bet pipeline |
-| `/api/portfolio` | GET | User bets by nullifier |
+| `/api/portfolio` | GET | User bets by address |
 | `/api/agents/register` | POST | Register AI agent |
 | `/api/agents` | GET | Agent leaderboard |
 | `/api/agents/trade` | POST | Agent trade endpoint |
 | `/api/wallets` | GET | Burner wallet tracking |
-| `/api/worldid` | GET | World ID rp_context |
-| `/api/verify` | POST | Verify World ID proof |

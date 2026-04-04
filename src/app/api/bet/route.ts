@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAgent, paymentRequiredResponse } from "@/lib/agent-middleware";
 
 // Agent API — place bets via x402 micropayments
-// Protected by World Agent Kit: only human-backed agents can use this
+// Only human-backed agents can use this
 export async function POST(req: NextRequest) {
   // Verify agent identity + payment
   const agent = await verifyAgent(req);
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     // Agent request — check human-backed + payment
     if (!agent.isHumanBacked) {
       return NextResponse.json(
-        { error: "Agent not registered in AgentBook. Register at: npx @worldcoin/agentkit-cli register <wallet>" },
+        { error: "Agent not registered. Register via /api/agents/register" },
         { status: 403 }
       );
     }

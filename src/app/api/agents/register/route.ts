@@ -3,16 +3,16 @@ import { registerAgent } from "@/lib/agent-store";
 import { getBets } from "@/lib/store";
 
 // POST /api/agents/register — Register a new AI agent
-// Body: { nullifier, agentWallet, name, limits? }
-// The nullifier must belong to a World ID verified human with at least one bet
+// Body: { address, agentWallet, name, limits? }
+// The address must belong to a connected wallet with activity or a valid EVM address
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { nullifier, agentWallet, name, limits } = body;
+    const { address, agentWallet, name, limits } = body;
 
-    if (!nullifier) {
+    if (!address) {
       return NextResponse.json(
-        { error: "Missing nullifier — human must be World ID verified" },
+        { error: "Missing address — wallet must be connected" },
         { status: 400 }
       );
     }
@@ -24,21 +24,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify nullifier is known (has been verified via World ID)
-    // In production, check against a verified nullifier registry
-    // For demo, we accept any nullifier that looks valid or has bets
-    const hasActivity = getBets(nullifier).length > 0;
-    const looksValid = nullifier.startsWith("0x") && nullifier.length > 10;
+    // Verify address is known (has activity or looks valid)
+    const hasActivity = getBets(address).length > 0;
+    const looksValid = address.startsWith("0x") && address.length === 42;
 
     if (!hasActivity && !looksValid) {
       return NextResponse.json(
-        { error: "Nullifier not recognized — complete World ID verification first" },
+        { error: "Address not recognized — connect your wallet first" },
         { status: 403 }
       );
     }
 
     const result = registerAgent({
-      humanNullifier: nullifier,
+      humanAddress: address,
       agentWallet,
       name,
       limits,

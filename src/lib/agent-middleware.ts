@@ -1,5 +1,5 @@
-// World Agent Kit x402 middleware
-// Protects API endpoints: agents must be registered in AgentBook + pay per request
+// Agent x402 middleware
+// Protects API endpoints: agents must be registered + pay per request
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -35,7 +35,7 @@ export async function verifyAgent(req: NextRequest): Promise<AgentVerification> 
     return { isAgent: false, isHumanBacked: false, walletAddress: null, freeUsesRemaining: 0 };
   }
 
-  // Verify agent wallet against World AgentBook on World Chain
+  // Verify agent wallet against AgentBook registry
   let isRegistered = false;
   try {
     const agentBookRes = await fetch(

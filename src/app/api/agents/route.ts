@@ -24,7 +24,7 @@ export async function GET() {
         maxBetSize: a.limits.maxBetSize,
         maxDailyVolume: a.limits.maxDailyVolume,
       },
-      // humanNullifier is intentionally NOT exposed
+      // humanAddress is intentionally NOT exposed
     })),
     count: agents.length,
   });

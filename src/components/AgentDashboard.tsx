@@ -27,10 +27,10 @@ interface AgentInfo {
 }
 
 interface Props {
-  nullifier: string;
+  userAddress: string;
 }
 
-export function AgentDashboard({ nullifier }: Props) {
+export function AgentDashboard({ userAddress }: Props) {
   const [myAgents, setMyAgents] = useState<AgentInfo[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentInfo[]>([]);
   const [view, setView] = useState<"my" | "leaderboard">("leaderboard");
@@ -48,7 +48,7 @@ export function AgentDashboard({ nullifier }: Props) {
   const fetchData = useCallback(async () => {
     try {
       const [myRes, allRes] = await Promise.all([
-        fetch(`/api/agents/my?nullifier=${encodeURIComponent(nullifier)}`),
+        fetch(`/api/agents/my?address=${encodeURIComponent(userAddress)}`),
         fetch("/api/agents"),
       ]);
       if (myRes.ok) {
@@ -64,7 +64,7 @@ export function AgentDashboard({ nullifier }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [nullifier]);
+  }, [userAddress]);
 
   useEffect(() => {
     fetchData();
@@ -84,7 +84,7 @@ export function AgentDashboard({ nullifier }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nullifier,
+          address: userAddress,
           agentWallet: regWallet.trim(),
           name: regName.trim(),
           limits: {
@@ -117,7 +117,7 @@ export function AgentDashboard({ nullifier }: Props) {
       const res = await fetch(`/api/agents/${agentId}/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nullifier }),
+        body: JSON.stringify({ address: userAddress }),
       });
       const data = await res.json();
       if (data.success) {
@@ -197,7 +197,7 @@ export function AgentDashboard({ nullifier }: Props) {
             <button onClick={() => setShowRegister(false)} className="text-gray-500 hover:text-white text-lg">&times;</button>
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Authorize an AI agent to trade on your behalf. Your World ID ensures accountability without revealing your identity.
+            Authorize an AI agent to trade on your behalf. Your wallet address ensures accountability.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
@@ -251,7 +251,7 @@ export function AgentDashboard({ nullifier }: Props) {
           </div>
           <div className="flex items-center gap-2 mt-3 text-[10px] text-gray-600">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            Agent is traceable to your World ID. Max 5 agents per verified human.
+            Agent is traceable to your wallet address. Max 5 agents per wallet.
           </div>
         </div>
       )}
@@ -263,7 +263,7 @@ export function AgentDashboard({ nullifier }: Props) {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold">Agent Leaderboard</h3>
               <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-semibold">
-                Human-Backed
+                Wallet-Backed
               </span>
             </div>
             <span className="text-xs text-gray-500">{leaderboard.length} active agents</span>
@@ -347,7 +347,7 @@ export function AgentDashboard({ nullifier }: Props) {
 
           <div className="px-4 py-2.5 border-t border-gray-800 flex items-center gap-2 text-[10px] text-gray-600">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            Every agent is backed by a verified human via World ID — accountability without identity
+            Every agent is backed by a connected wallet — accountability without identity exposure
           </div>
         </div>
       )}

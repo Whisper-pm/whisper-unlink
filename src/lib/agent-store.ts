@@ -1,6 +1,6 @@
 // Whisper — Agent Registration Store with JSON file persistence
 // Persists to data/agents.json for durability across restarts
-// Each agent is traceable back to a verified human via World ID nullifier
+// Each agent is traceable back to a wallet address
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
@@ -25,7 +25,7 @@ export interface AgentStats {
 export interface AgentRegistration {
   agentId: string;
   agentWallet: string;      // agent's EVM address
-  humanNullifier: string;   // World ID nullifier of the authorizing human
+  humanAddress: string;     // wallet address of the authorizing human
   name: string;
   createdAt: number;        // unix ms
   status: "active" | "paused" | "revoked";
@@ -41,26 +41,34 @@ const MAX_AGENTS_PER_HUMAN = 5;
 
 interface PersistedData {
   agents: Record<string, AgentRegistration>;
-  nullifierIndex: Record<string, string[]>;
+  addressIndex: Record<string, string[]>;
 }
 
-function loadFromDisk(): { agentStore: Map<string, AgentRegistration>; nullifierIndex: Map<string, Set<string>> } {
+function loadFromDisk(): { agentStore: Map<string, AgentRegistration>; addressIndex: Map<string, Set<string>> } {
   if (!existsSync(STORE_PATH)) {
-    return { agentStore: new Map(), nullifierIndex: new Map() };
+    return { agentStore: new Map(), addressIndex: new Map() };
   }
   try {
     const raw: PersistedData = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
     const agents = new Map<string, AgentRegistration>();
     for (const [key, value] of Object.entries(raw.agents || {})) {
-      agents.set(key, value);
+      // Migration: rename humanNullifier -> humanAddress if present
+      const agent = value as any;
+      if (agent.humanNullifier && !agent.humanAddress) {
+        agent.humanAddress = agent.humanNullifier;
+        delete agent.humanNullifier;
+      }
+      agents.set(key, agent);
     }
     const index = new Map<string, Set<string>>();
-    for (const [key, value] of Object.entries(raw.nullifierIndex || {})) {
-      index.set(key, new Set(value));
+    // Support both old nullifierIndex and new addressIndex keys
+    const indexData = raw.addressIndex || (raw as any).nullifierIndex || {};
+    for (const [key, value] of Object.entries(indexData)) {
+      index.set(key, new Set(value as string[]));
     }
-    return { agentStore: agents, nullifierIndex: index };
+    return { agentStore: agents, addressIndex: index };
   } catch {
-    return { agentStore: new Map(), nullifierIndex: new Map() };
+    return { agentStore: new Map(), addressIndex: new Map() };
   }
 }
 
@@ -69,13 +77,13 @@ function saveToDisk() {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const data: PersistedData = {
     agents: {},
-    nullifierIndex: {},
+    addressIndex: {},
   };
   for (const [key, value] of agentStore.entries()) {
     data.agents[key] = value;
   }
-  for (const [key, value] of nullifierIndex.entries()) {
-    data.nullifierIndex[key] = Array.from(value);
+  for (const [key, value] of addressIndex.entries()) {
+    data.addressIndex[key] = Array.from(value);
   }
   writeFileSync(STORE_PATH, JSON.stringify(data, null, 2));
 }
@@ -84,7 +92,7 @@ function saveToDisk() {
 
 const loaded = loadFromDisk();
 const agentStore = loaded.agentStore;
-const nullifierIndex = loaded.nullifierIndex;
+const addressIndex = loaded.addressIndex;
 
 // ---------- Helpers ----------
 
@@ -107,16 +115,16 @@ function generateAgentId(): string {
 // ---------- Public API ----------
 
 export function registerAgent(params: {
-  humanNullifier: string;
+  humanAddress: string;
   agentWallet: string;
   name: string;
   limits?: Partial<AgentLimits>;
 }): { success: true; agent: AgentRegistration } | { success: false; error: string } {
-  const { humanNullifier, agentWallet, name, limits } = params;
+  const { humanAddress, agentWallet, name, limits } = params;
 
   // Validate inputs
-  if (!humanNullifier || !agentWallet || !name) {
-    return { success: false, error: "Missing required fields: humanNullifier, agentWallet, name" };
+  if (!humanAddress || !agentWallet || !name) {
+    return { success: false, error: "Missing required fields: humanAddress, agentWallet, name" };
   }
 
   if (!agentWallet.startsWith("0x") || agentWallet.length !== 42) {
@@ -124,7 +132,7 @@ export function registerAgent(params: {
   }
 
   // Rate limit: max agents per human
-  const existingAgents = nullifierIndex.get(humanNullifier);
+  const existingAgents = addressIndex.get(humanAddress);
   const activeCount = existingAgents
     ? Array.from(existingAgents).filter((id) => {
         const a = agentStore.get(id);
@@ -135,7 +143,7 @@ export function registerAgent(params: {
   if (activeCount >= MAX_AGENTS_PER_HUMAN) {
     return {
       success: false,
-      error: `Maximum ${MAX_AGENTS_PER_HUMAN} active agents per verified human. Revoke an existing agent first.`,
+      error: `Maximum ${MAX_AGENTS_PER_HUMAN} active agents per wallet. Revoke an existing agent first.`,
     };
   }
 
@@ -149,7 +157,7 @@ export function registerAgent(params: {
   const agent: AgentRegistration = {
     agentId: generateAgentId(),
     agentWallet: agentWallet.toLowerCase(),
-    humanNullifier,
+    humanAddress,
     name: name.trim(),
     createdAt: Date.now(),
     status: "active",
@@ -171,10 +179,10 @@ export function registerAgent(params: {
   agentStore.set(agent.agentId, agent);
 
   // Update index
-  if (!nullifierIndex.has(humanNullifier)) {
-    nullifierIndex.set(humanNullifier, new Set());
+  if (!addressIndex.has(humanAddress)) {
+    addressIndex.set(humanAddress, new Set());
   }
-  nullifierIndex.get(humanNullifier)!.add(agent.agentId);
+  addressIndex.get(humanAddress)!.add(agent.agentId);
 
   saveToDisk();
   return { success: true, agent };
@@ -184,8 +192,8 @@ export function getAgent(agentId: string): AgentRegistration | null {
   return agentStore.get(agentId) ?? null;
 }
 
-export function getAgentsByHuman(nullifier: string): AgentRegistration[] {
-  const ids = nullifierIndex.get(nullifier);
+export function getAgentsByHuman(address: string): AgentRegistration[] {
+  const ids = addressIndex.get(address);
   if (!ids) return [];
   return Array.from(ids)
     .map((id) => agentStore.get(id)!)
@@ -201,13 +209,13 @@ export function getAllAgents(): AgentRegistration[] {
 
 export function revokeAgent(
   agentId: string,
-  nullifier: string
+  address: string
 ): { success: true } | { success: false; error: string } {
   const agent = agentStore.get(agentId);
   if (!agent) {
     return { success: false, error: "Agent not found" };
   }
-  if (agent.humanNullifier !== nullifier) {
+  if (agent.humanAddress !== address) {
     return { success: false, error: "Only the authorizing human can revoke this agent" };
   }
   if (agent.status === "revoked") {
@@ -282,4 +290,3 @@ export function validateAgentTrade(
 
   return null; // valid
 }
-

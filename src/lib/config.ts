@@ -46,12 +46,4 @@ export const CONFIG = {
     },
   },
 
-  // World ID 4.0
-  worldId: {
-    appId: process.env.NEXT_PUBLIC_WORLD_APP_ID ?? "app_3d5576fc638abf077d13427e3ba4507e",
-    rpId: process.env.WORLD_RP_ID ?? "rp_cd004f9bd8012e0a",
-    signingKey: process.env.WORLD_SIGNING_KEY ?? "",
-    action: "verify-human",
-    verifyUrl: "https://developer.world.org/api/v4/verify",
-  },
 } as const;

@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Record a pending bet in the main store (attributed to the agent's human)
-    const bet = addBet(agent.humanNullifier, {
+    const bet = addBet(agent.humanAddress, {
       market: `[Agent: ${agent.name}] ${marketQuestion || conditionId}`,
       conditionId,
       side: side as "YES" | "NO",
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       side,
       amount: String(Math.floor(numAmount * 1e6)), // convert USDC to micro-units
       evmPrivateKey: DEMO_PK,
-      nullifier: agent.humanNullifier,
+      userAddress: agent.humanAddress,
       marketQuestion: marketQuestion || `[Agent: ${agent.name}] ${conditionId}`,
       odds: "50%",
     };
@@ -102,16 +102,16 @@ export async function POST(req: NextRequest) {
 
         if (pipelineData.success) {
           // Pipeline succeeded — update the bet with real data
-          updateBetStatus(agent.humanNullifier, bet.id, "active");
+          updateBetStatus(agent.humanAddress, bet.id, "active");
           updateAgentStats(agentId, { betAmount: 0, won: true, pnl: 0 });
         } else {
           // Pipeline failed
-          updateBetStatus(agent.humanNullifier, bet.id, "lost");
+          updateBetStatus(agent.humanAddress, bet.id, "lost");
           updateAgentStats(agentId, { betAmount: 0, won: false, pnl: -numAmount });
         }
       } catch (err) {
         // Pipeline error — mark bet as lost
-        updateBetStatus(agent.humanNullifier, bet.id, "lost");
+        updateBetStatus(agent.humanAddress, bet.id, "lost");
         updateAgentStats(agentId, { betAmount: 0, won: false, pnl: -numAmount });
       }
     })();

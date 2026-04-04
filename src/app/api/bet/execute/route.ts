@@ -68,7 +68,7 @@ const amoyChain = { id: 80002, name: "Amoy" as const, nativeCurrency: { name: "M
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { conditionId, side, amount, evmPrivateKey, ledgerSignature, ledgerAddress, nullifier, marketQuestion, odds } = body;
+  const { conditionId, side, amount, evmPrivateKey, ledgerSignature, ledgerAddress, userAddress, marketQuestion, odds } = body;
 
   if (!conditionId || !side || !amount) {
     return NextResponse.json({ error: "Missing conditionId, side, or amount" }, { status: 400 });
@@ -285,8 +285,8 @@ export async function POST(req: NextRequest) {
     // Persist bet
     const amountUsdc = parseFloat(formatUnits(amountBigint, 6));
     let savedBet = null;
-    if (nullifier) {
-      savedBet = addBet(nullifier, {
+    if (userAddress) {
+      savedBet = addBet(userAddress, {
         market: marketQuestion || `Market ${conditionId.substring(0, 10)}...`,
         conditionId: testnetConditionId,
         side: side as "YES" | "NO",

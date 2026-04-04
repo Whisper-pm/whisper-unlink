@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Whisper — Private Predictions",
-  description: "Bet anonymously on Polymarket. Privacy by Unlink, verified by World ID, signed by Ledger.",
+  description: "Bet anonymously on Polymarket. Privacy by Unlink, signed by Ledger.",
 };
 
 export default function RootLayout({

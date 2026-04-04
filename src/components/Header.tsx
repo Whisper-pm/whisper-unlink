@@ -20,8 +20,8 @@ export function Header() {
             <span>Unlink</span>
             <span className="w-2 h-2 bg-blue-500 rounded-full ml-2" />
             <span>CCTP</span>
-            <span className="w-2 h-2 bg-purple-500 rounded-full ml-2" />
-            <span>World ID</span>
+            <span className="w-2 h-2 bg-cyan-500 rounded-full ml-2" />
+            <span>Polymarket</span>
           </div>
 
           {isConnected ? (

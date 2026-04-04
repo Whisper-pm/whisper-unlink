@@ -26,6 +26,6 @@ export async function GET(
       winRate: agent.stats.winRate,
       pnl: agent.stats.pnl,
     },
-    // humanNullifier NOT exposed in public endpoint
+    // humanAddress NOT exposed in public endpoint
   });
 }

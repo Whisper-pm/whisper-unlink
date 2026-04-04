@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
     log("cctp:relay", "started");
     const relayerWallet = createWalletClient({ account, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
 
-    const amoyRelayGas = { maxFeePerGas: 2000000000n, maxPriorityFeePerGas: 1500000000n };
+    const amoyRelayGas = { maxFeePerGas: 80000000000n, maxPriorityFeePerGas: 30000000000n };
     const receiveTx = await relayerWallet.writeContract({
       address: MSG_TRANSMITTER, abi: mtAbi, functionName: "receiveMessage",
       args: [attestation.message as `0x${string}`, attestation.attestation as `0x${string}`],
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     // ============================================================
     const burnerAmoyWallet = createWalletClient({ account: burnerAccount, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
     // Low gas overrides for Amoy testnet (base fee is 0, default priority is wasteful)
-    const amoyGas = { maxFeePerGas: 2000000000n, maxPriorityFeePerGas: 1500000000n }; // 2 gwei
+    const amoyGas = { maxFeePerGas: 80000000000n, maxPriorityFeePerGas: 30000000000n }; // 2 gwei
 
     // Create condition on testnet
     log("polymarket:prepare", "started");

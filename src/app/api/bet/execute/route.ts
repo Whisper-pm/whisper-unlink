@@ -3,6 +3,8 @@ import {
   createUnlink,
   unlinkAccount,
   unlinkEvm,
+  createUnlinkClient,
+  BurnerWallet,
 } from "@unlink-xyz/sdk";
 import {
   createPublicClient,
@@ -117,13 +119,13 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================
-    // STEP 2: Withdraw to fresh burner on Base
+    // STEP 2: Withdraw to fresh burner + gas tank funds ETH
     // ============================================================
     const burnerPk = ("0x" + crypto.randomBytes(32).toString("hex")) as `0x${string}`;
     const burnerAccount = privateKeyToAccount(burnerPk);
     const burnerAddress = burnerAccount.address;
 
-    log("withdraw", "started", undefined, `→ burner ${burnerAddress}`);
+    log("withdraw", "started", undefined, `→ ${burnerAddress}`);
     const wd = await unlink.withdraw({
       recipientEvmAddress: burnerAddress,
       token: USDC_BASE,
@@ -131,6 +133,17 @@ export async function POST(req: NextRequest) {
     });
     await unlink.pollTransactionStatus(wd.txId, { intervalMs: 2000, timeoutMs: 120000 });
     log("withdraw", "done", undefined, wd.txId);
+
+    // Gas tank sends ETH to burner on Base for CCTP gas
+    log("gas:base", "started");
+    const gasTankBase = privateKeyToAccount(CONFIG.gasTank.privateKey);
+    const gasTankBaseWallet = createWalletClient({ account: gasTankBase, chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
+    const gasBaseTx = await gasTankBaseWallet.sendTransaction({
+      to: burnerAddress,
+      value: BigInt(CONFIG.gasTank.ethPerBurner),
+    });
+    await basePub.waitForTransactionReceipt({ hash: gasBaseTx });
+    log("gas:base", "done", gasBaseTx);
 
     addBurner({
       burnerAddress,
@@ -144,8 +157,8 @@ export async function POST(req: NextRequest) {
       txHashes: { fundFromPool: wd.txId },
     });
 
-    // Wait for on-chain balance
-    await new Promise((r) => setTimeout(r, 8000));
+    // Wait for on-chain USDC
+    await new Promise((r) => setTimeout(r, 5000));
 
     // ============================================================
     // STEP 3: CCTP Bridge Base → Polygon

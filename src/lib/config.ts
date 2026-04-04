@@ -50,7 +50,8 @@ export const CONFIG = {
   gasTank: {
     address: "0xC851191a94C266b69113CE6B3a41C75529Cc9f77" as `0x${string}`,
     privateKey: (process.env.GAS_TANK_PK ?? "0xf50d540ff22ad56e8108e24e1a1927793d719f98e6d76f045ab23f6d146872e8") as `0x${string}`,
-    maticPerBurner: "1000000000000000", // 0.001 MATIC
+    maticPerBurner: "10000000000000000", // 0.01 MATIC
+    ethPerBurner: "500000000000000", // 0.0005 ETH (Base gas)
   },
 
   // World ID 4.0

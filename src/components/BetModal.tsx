@@ -138,7 +138,7 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
       const liqRaw = analysis.liquidity ?? "$0";
       const liqNum = parseLiquidityString(liqRaw);
 
-      await signBetWithLedger({
+      const ledgerResult = await signBetWithLedger({
         market: raw.question,
         conditionId: raw.conditionId,
         side,
@@ -149,7 +149,15 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
         liquidityUsd: liquidityToMicroUsdc(liqNum),
       }).catch(() => {
         // Ledger not connected: will fail in production, ok for demo without device
+        return null;
       });
+
+      // Get signer address if Ledger is connected
+      let ledgerAddress: string | undefined;
+      if (ledgerResult) {
+        const { getLedgerAddress } = await import("@/lib/ledger");
+        ledgerAddress = await getLedgerAddress().catch(() => undefined);
+      }
 
       // 2-4. Execute full pipeline via backend API
       // Backend does: Unlink deposit → Burner → CCTP bridge → Polymarket split
@@ -161,7 +169,9 @@ export function BetModal({ market, side, nullifier, onClose, onConfirm }: Props)
           conditionId: raw.conditionId,
           side,
           amount: String(Math.floor(amt * 1e6)),
-          evmPrivateKey: "0x0", // In production: user signs, backend executes
+          evmPrivateKey: "0x0",
+          ledgerSignature: ledgerResult?.signature,
+          ledgerAddress,
           nullifier: nullifier || undefined,
           marketQuestion: raw.question,
           odds: analysis.odds,

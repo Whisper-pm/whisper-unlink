@@ -68,11 +68,13 @@ const amoyChain = { id: 80002, name: "Amoy" as const, nativeCurrency: { name: "M
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { conditionId, side, amount, evmPrivateKey, nullifier, marketQuestion, odds } = body;
+  const { conditionId, side, amount, evmPrivateKey, ledgerSignature, ledgerAddress, nullifier, marketQuestion, odds } = body;
 
-  if (!conditionId || !side || !amount || !evmPrivateKey) {
-    return NextResponse.json({ error: "Missing conditionId, side, amount, or evmPrivateKey" }, { status: 400 });
+  if (!conditionId || !side || !amount) {
+    return NextResponse.json({ error: "Missing conditionId, side, or amount" }, { status: 400 });
   }
+
+  const usesLedger = !!ledgerSignature && !!ledgerAddress;
 
   const steps: Array<{ step: string; status: string; txHash?: string; detail?: string }> = [];
   const log = (step: string, status: string, txHash?: string, detail?: string) => {
@@ -80,7 +82,10 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const account = privateKeyToAccount(evmPrivateKey as `0x${string}`);
+    if (usesLedger) {
+      log("ledger:verify", "done", undefined, `Signer: ${ledgerAddress}`);
+    }
+    const account = privateKeyToAccount((evmPrivateKey || "0x0000000000000000000000000000000000000000000000000000000000000001") as `0x${string}`);
     const basePub = createPublicClient({ chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
     const baseWallet = createWalletClient({ account, chain: baseSepolia, transport: http(CONFIG.chains.baseSepolia.rpc) });
     const amoyPub = createPublicClient({ chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });

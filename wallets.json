@@ -12,6 +12,19 @@
       "txHashes": {
         "fundFromPool": "1ace8da9-9870-4f46-80a3-fc1f722d8c2e"
       }
+    },
+    {
+      "burnerAddress": "0x420f757b831787e03824CC5e6D9638f1Dd563c19",
+      "createdAt": "2026-04-04T15:01:39.839Z",
+      "parentEvmAddress": "0xe13D91ad3186cA094E202da8795A9b0DcC250D19",
+      "market": "Will ETH reach $10K by end of 2026?",
+      "side": "YES",
+      "amount": "0.1",
+      "status": "bet_placed",
+      "txHashes": {
+        "cctpBurn": "0xb94391b194aab3735afea6c56bb37127bbf0925e11905af60285ea45dcbaf73d",
+        "splitPosition": "0x81c427e8c1ae83920895712f3b44510bc3db1f724b7d5bc7b4d56d738deff224"
+      }
     }
   ]
 }

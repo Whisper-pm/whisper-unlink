@@ -1,5 +1,8 @@
-// Ledger DMK integration — real hardware signing with Clear Signing
-// Connects to Ledger via WebHID, signs typed data with AI analysis enrichment
+// Ledger DMK integration — real hardware signing with ERC-7730 Clear Signing
+// Connects to Ledger via WebHID, signs typed data with prediction market
+// metadata displayed on the device screen.
+//
+// This is the first prediction market app with ERC-7730 Clear Signing metadata.
 
 import {
   DeviceManagementKitBuilder,
@@ -11,6 +14,41 @@ import {
   SignerEthBuilder,
   type SignerEth,
 } from "@ledgerhq/device-signer-kit-ethereum";
+
+import { createWhisperContextModule } from "./erc7730-context";
+import { findDescriptor, resolveDisplayFields } from "@/erc7730";
+
+/** AI analysis fields embedded into EIP-712 typed data for Ledger Clear Signing */
+export interface LedgerAIAnalysis {
+  /** AI confidence score 0-100 */
+  aiScore: number;
+  /** Risk assessment */
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  /** Short thesis line (truncated to fit Ledger screen) */
+  aiThesis: string;
+  /** Market liquidity in USD (raw number, not formatted) */
+  liquidityUsd: number;
+}
+
+/**
+ * Truncate and clean a thesis string for Ledger display.
+ * Ledger screens have limited width (~40 chars per line).
+ */
+export function formatThesisForLedger(thesis: string): string {
+  if (!thesis) return "No analysis";
+  // Strip emojis, trim, and cap at 60 chars
+  const clean = thesis.replace(/[\u{1F000}-\u{1FFFF}]/gu, "").trim();
+  if (clean.length <= 60) return clean;
+  return clean.slice(0, 57) + "...";
+}
+
+/**
+ * Convert a raw liquidity number to USDC micro-units (6 decimals).
+ * e.g. $50,000 -> "50000000000"
+ */
+export function liquidityToMicroUsdc(liquidityUsd: number): string {
+  return String(Math.floor(liquidityUsd * 1e6));
+}
 
 let dmk: DeviceManagementKit | null = null;
 let sessionId: DeviceSessionId | null = null;
@@ -29,7 +67,8 @@ export function initLedgerDMK(): DeviceManagementKit {
 
 /**
  * Connect to a Ledger device.
- * Returns the session ID for signing operations.
+ * Injects the Whisper ERC-7730 context module so the device displays
+ * human-readable prediction market details during Clear Signing.
  */
 export async function connectLedger(): Promise<DeviceSessionId> {
   const kit = initLedgerDMK();
@@ -42,7 +81,13 @@ export async function connectLedger(): Promise<DeviceSessionId> {
           const session = await kit.connect({ device });
           sessionId = session;
 
-          signer = new SignerEthBuilder({ dmk: kit, sessionId: session }).build();
+          // Build signer with our custom ERC-7730 context module
+          // This makes the Ledger display prediction market data
+          // instead of raw hex during signing
+          const contextModule = createWhisperContextModule();
+          signer = new SignerEthBuilder({ dmk: kit, sessionId: session })
+            .withContextModule(contextModule)
+            .build();
 
           sub.unsubscribe();
           resolve(session);
@@ -58,11 +103,15 @@ export async function connectLedger(): Promise<DeviceSessionId> {
 /**
  * Get the Ethereum address from the connected Ledger.
  */
-export async function getLedgerAddress(derivationPath = "44'/60'/0'/0/0"): Promise<string> {
+export async function getLedgerAddress(
+  derivationPath = "44'/60'/0'/0/0"
+): Promise<string> {
   if (!signer) throw new Error("Ledger not connected");
 
   return new Promise((resolve, reject) => {
-    const { observable } = signer!.getAddress(derivationPath, { checkOnDevice: false });
+    const { observable } = signer!.getAddress(derivationPath, {
+      checkOnDevice: false,
+    });
     observable.subscribe({
       next: (result: any) => {
         if (result.status === "success") {
@@ -76,8 +125,8 @@ export async function getLedgerAddress(derivationPath = "44'/60'/0'/0/0"): Promi
 
 /**
  * Sign EIP-712 typed data on the Ledger.
- * The Clear Signing metadata (ERC-7730) will automatically render
- * human-readable info on the device screen.
+ * The ERC-7730 context module automatically resolves Clear Signing metadata
+ * from our local descriptors, displaying human-readable fields on the device.
  */
 export async function signTypedDataOnLedger(
   derivationPath: string,
@@ -101,56 +150,272 @@ export async function signTypedDataOnLedger(
 }
 
 /**
- * Sign a bet approval with AI analysis enrichment.
- * This is the core Ledger integration — the device screen shows:
- *   Market: [question]
+ * Build EIP-712 typed data for a Whisper private bet.
+ * Matches the WhisperBet schema in whisper-bet.json ERC-7730 descriptor.
+ *
+ * The Ledger will display:
+ *   Action: AI-Analyzed Prediction Bet
+ *   Market: [question text]
  *   Position: YES/NO
- *   Amount: X USDC
- *   AI: Odds XX% | EV +$XX | Risk LOW/MED/HIGH
+ *   Amount: X.XX USDC
+ *   AI Score: XX/100
+ *   Risk: LOW/MEDIUM/HIGH Risk
+ *   AI Thesis: [analysis]
+ *   Liquidity: X.XX USDC
+ *   Time: [human-readable date]
  */
-export async function signBetWithLedger(params: {
-  market: string;
+export function buildBetTypedData(params: {
   conditionId: string;
   side: "YES" | "NO";
   amount: string;
-  aiAnalysis: string; // formatted by formatForLedger()
-  derivationPath?: string;
+  market: string;
+  aiScore: number;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  aiThesis: string;
+  liquidityUsd: string;
 }) {
-  const path = params.derivationPath ?? "44'/60'/0'/0/0";
-
-  // Build EIP-712 typed data for the bet
-  // In production: this would match the actual Polymarket order struct
-  // The ERC-7730 descriptor transforms this into human-readable on the device
-  const typedData = {
+  return {
     domain: {
       name: "Whisper Private Bet",
       version: "1",
       chainId: 84532, // Base Sepolia
     },
     types: {
-      PlaceBet: [
+      WhisperBet: [
+        { name: "marketQuestion", type: "string" },
         { name: "conditionId", type: "bytes32" },
-        { name: "side", type: "uint8" },
+        { name: "side", type: "string" },
         { name: "amount", type: "uint256" },
+        { name: "aiScore", type: "uint8" },
+        { name: "riskLevel", type: "string" },
+        { name: "aiThesis", type: "string" },
+        { name: "liquidityUsd", type: "uint256" },
         { name: "timestamp", type: "uint256" },
       ],
     },
-    primaryType: "PlaceBet" as const,
+    primaryType: "WhisperBet" as const,
     message: {
+      marketQuestion: params.market,
       conditionId: params.conditionId,
-      side: params.side === "YES" ? 1 : 0,
+      side: params.side,
       amount: params.amount,
+      aiScore: params.aiScore,
+      riskLevel: params.riskLevel,
+      aiThesis: params.aiThesis,
+      liquidityUsd: params.liquidityUsd,
       timestamp: Math.floor(Date.now() / 1000),
     },
   };
+}
+
+/**
+ * Build EIP-712 typed data for a Polymarket CTF Exchange order.
+ * Matches the Order schema in polymarket-ctf-exchange.json descriptor.
+ *
+ * The Ledger will display:
+ *   Action: Place Prediction Market Trade
+ *   Trade Side: BUY/SELL
+ *   Outcome Token ID: [tokenId]
+ *   You Pay: X.XX USDC
+ *   You Receive: [shares]
+ *   From Address: 0xAB...CD
+ *   Expires At: [date]
+ *   Fee Rate: [bps]
+ */
+export function buildCTFOrderTypedData(params: {
+  salt: string;
+  maker: string;
+  signer: string;
+  taker: string;
+  tokenId: string;
+  makerAmount: string;
+  takerAmount: string;
+  expiration: string;
+  nonce: string;
+  feeRateBps: string;
+  side: 0 | 1; // 0=BUY, 1=SELL
+  signatureType: 0 | 1 | 2;
+}) {
+  return {
+    domain: {
+      name: "Polymarket CTF Exchange",
+      version: "1",
+      chainId: 137,
+      verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E",
+    },
+    types: {
+      Order: [
+        { name: "salt", type: "uint256" },
+        { name: "maker", type: "address" },
+        { name: "signer", type: "address" },
+        { name: "taker", type: "address" },
+        { name: "tokenId", type: "uint256" },
+        { name: "makerAmount", type: "uint256" },
+        { name: "takerAmount", type: "uint256" },
+        { name: "expiration", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "feeRateBps", type: "uint256" },
+        { name: "side", type: "uint8" },
+        { name: "signatureType", type: "uint8" },
+      ],
+    },
+    primaryType: "Order" as const,
+    message: params,
+  };
+}
+
+/**
+ * Build EIP-712 typed data for a Polymarket Neg Risk Exchange order.
+ * Same Order structure but different verifying contract.
+ */
+export function buildNegRiskOrderTypedData(params: {
+  salt: string;
+  maker: string;
+  signer: string;
+  taker: string;
+  tokenId: string;
+  makerAmount: string;
+  takerAmount: string;
+  expiration: string;
+  nonce: string;
+  feeRateBps: string;
+  side: 0 | 1;
+  signatureType: 0 | 1 | 2;
+}) {
+  return {
+    domain: {
+      name: "Polymarket Neg Risk CTF Exchange",
+      version: "1",
+      chainId: 137,
+      verifyingContract: "0xC5d563A36AE78145C45a50134d48A1215220f80a",
+    },
+    types: {
+      Order: [
+        { name: "salt", type: "uint256" },
+        { name: "maker", type: "address" },
+        { name: "signer", type: "address" },
+        { name: "taker", type: "address" },
+        { name: "tokenId", type: "uint256" },
+        { name: "makerAmount", type: "uint256" },
+        { name: "takerAmount", type: "uint256" },
+        { name: "expiration", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "feeRateBps", type: "uint256" },
+        { name: "side", type: "uint8" },
+        { name: "signatureType", type: "uint8" },
+      ],
+    },
+    primaryType: "Order" as const,
+    message: params,
+  };
+}
+
+/**
+ * Build EIP-712 typed data for Permit2 (Unlink deposit approval).
+ * Matches the PermitSingle schema in permit2-usdc.json descriptor.
+ *
+ * The Ledger will display:
+ *   Action: Approve Token for Unlink Deposit
+ *   Token: 0x03...7e
+ *   Approved Amount: X.XX USDC
+ *   Spender: 0x64...82 (Unlink Pool)
+ *   Approval Expires: [date]
+ *   Signature Deadline: [date]
+ */
+export function buildPermit2TypedData(params: {
+  token: string;
+  amount: string;
+  expiration: number;
+  nonce: number;
+  spender: string;
+  sigDeadline: number;
+}) {
+  return {
+    domain: {
+      name: "Permit2",
+      chainId: 84532,
+      verifyingContract: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    },
+    types: {
+      PermitSingle: [
+        { name: "details", type: "PermitDetails" },
+        { name: "spender", type: "address" },
+        { name: "sigDeadline", type: "uint256" },
+      ],
+      PermitDetails: [
+        { name: "token", type: "address" },
+        { name: "amount", type: "uint160" },
+        { name: "expiration", type: "uint48" },
+        { name: "nonce", type: "uint48" },
+      ],
+    },
+    primaryType: "PermitSingle" as const,
+    message: {
+      details: {
+        token: params.token,
+        amount: params.amount,
+        expiration: params.expiration,
+        nonce: params.nonce,
+      },
+      spender: params.spender,
+      sigDeadline: params.sigDeadline,
+    },
+  };
+}
+
+/**
+ * Sign a bet with full ERC-7730 Clear Signing on the Ledger.
+ * The device screen shows human-readable prediction market details
+ * including AI analysis data.
+ */
+export async function signBetWithLedger(params: {
+  market: string;
+  conditionId: string;
+  side: "YES" | "NO";
+  amount: string;
+  aiScore: number;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  aiThesis: string;
+  liquidityUsd: string;
+  derivationPath?: string;
+}) {
+  const path = params.derivationPath ?? "44'/60'/0'/0/0";
+
+  const typedData = buildBetTypedData({
+    conditionId: params.conditionId,
+    side: params.side,
+    amount: params.amount,
+    market: params.market,
+    aiScore: params.aiScore,
+    riskLevel: params.riskLevel,
+    aiThesis: params.aiThesis,
+    liquidityUsd: params.liquidityUsd,
+  });
 
   const signature = await signTypedDataOnLedger(path, typedData);
 
   return {
     signature,
     typedData,
-    aiAnalysis: params.aiAnalysis,
   };
+}
+
+/**
+ * Preview what the Ledger will display for given typed data.
+ * Returns the resolved Clear Signing fields without needing a device.
+ */
+export function previewLedgerDisplay(typedData: {
+  domain?: { name?: string; verifyingContract?: string };
+  primaryType?: string;
+  message?: Record<string, unknown>;
+}): Array<{ label: string; value: string }> | null {
+  const descriptor = findDescriptor(typedData);
+  if (!descriptor || !typedData.primaryType || !typedData.message) return null;
+  return resolveDisplayFields(
+    descriptor,
+    typedData.primaryType,
+    typedData.message
+  );
 }
 
 /**

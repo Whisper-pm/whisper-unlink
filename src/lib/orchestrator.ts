@@ -5,7 +5,7 @@ import type { Account } from "viem";
 import { createWhisperUnlink, createFundedBurner, reshieldBurner, type WhisperUnlink } from "./unlink-client";
 import { bridgeBaseToPolygon, bridgePolygonToBase } from "./bridge";
 import { createTestMarket, splitUsdc, mintTestUsdc, getAmoyUsdcBalance } from "./polymarket-client";
-import { signBetWithLedger } from "./ledger";
+import { signBetWithLedger, formatThesisForLedger, liquidityToMicroUsdc } from "./ledger";
 import type { MarketAnalysis } from "./ai-scorer";
 
 export type BetStep =
@@ -42,15 +42,25 @@ export async function executeBet(
 
     // 1. Ledger signing (AI-enriched Clear Signing)
     onStep("signing", "Approve on Ledger...");
+    // Parse liquidity string (e.g. "$50K" -> 50000)
+    const liqStr = params.analysis.liquidity ?? "$0";
+    const liqNum = parseFloat(liqStr.replace(/[^0-9.]/g, "")) *
+      (liqStr.includes("M") ? 1e6 : liqStr.includes("K") ? 1e3 : 1);
+
     const ledgerSig = await signBetWithLedger({
       market: params.question,
       conditionId: params.conditionId,
       side: params.side,
       amount: params.amount,
-      aiAnalysis: `Odds: ${params.analysis.odds} | EV: ${params.analysis.ev} | Risk: ${params.analysis.risk}`,
+      aiScore: Math.min(100, Math.max(0, Math.round(params.analysis.score ?? 50))),
+      riskLevel: params.analysis.risk ?? "MEDIUM",
+      aiThesis: formatThesisForLedger(
+        params.analysis.thesis ?? `${params.analysis.recommendation}. Odds ${params.analysis.odds}`
+      ),
+      liquidityUsd: liquidityToMicroUsdc(liqNum),
     }).catch(() => {
       // Fallback if Ledger not connected — use software signing for demo
-      return { signature: "0xdemo", typedData: {}, aiAnalysis: "" };
+      return { signature: "0xdemo", typedData: {} };
     });
 
     // 2. Create funded burner from Unlink pool

@@ -4,17 +4,22 @@
     "eip712": {
       "schemas": [
         {
-          "primaryType": "PlaceBet",
+          "primaryType": "WhisperBet",
           "types": {
             "EIP712Domain": [
               { "name": "name", "type": "string" },
               { "name": "version", "type": "string" },
               { "name": "chainId", "type": "uint256" }
             ],
-            "PlaceBet": [
+            "WhisperBet": [
+              { "name": "marketQuestion", "type": "string" },
               { "name": "conditionId", "type": "bytes32" },
-              { "name": "side", "type": "uint8" },
+              { "name": "side", "type": "string" },
               { "name": "amount", "type": "uint256" },
+              { "name": "aiScore", "type": "uint8" },
+              { "name": "riskLevel", "type": "string" },
+              { "name": "aiThesis", "type": "string" },
+              { "name": "liquidityUsd", "type": "uint256" },
               { "name": "timestamp", "type": "uint256" }
             ]
           }
@@ -24,47 +29,82 @@
         "name": "Whisper Private Bet",
         "version": "1",
         "chainId": 84532
-      }
+      },
+      "domainSeparator": "0x"
     }
   },
   "metadata": {
     "owner": "Whisper",
     "info": {
       "url": "https://github.com/Whisper-pm",
-      "legalName": "Whisper Protocol"
+      "legalName": "Whisper Protocol",
+      "lastUpdate": "2026-04-03T00:00:00Z"
     },
     "enums": {
-      "side": {
-        "0": "NO",
-        "1": "YES"
+      "riskLevel": {
+        "LOW": "LOW Risk",
+        "MEDIUM": "MEDIUM Risk",
+        "HIGH": "HIGH Risk"
       }
+    },
+    "constants": {
+      "protocolName": "Whisper Anonymous Prediction Market"
     }
   },
   "display": {
     "formats": {
-      "PlaceBet": {
-        "intent": "Place Prediction Bet",
+      "WhisperBet": {
+        "intent": "AI-Analyzed Prediction Bet",
         "fields": [
           {
-            "path": "conditionId",
-            "label": "Market ID",
+            "path": "marketQuestion",
+            "label": "Market",
             "format": "raw"
           },
           {
             "path": "side",
             "label": "Position",
-            "format": "enum",
-            "params": {
-              "$ref": "$.metadata.enums.side"
-            }
+            "format": "raw"
           },
           {
             "path": "amount",
-            "label": "Bet Amount",
+            "label": "Amount (USDC)",
             "format": "tokenAmount",
             "params": {
               "tokenPath": "@.to",
-              "nativeCurrencyAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+              "nativeCurrencyAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "threshold": "0"
+            }
+          },
+          {
+            "path": "aiScore",
+            "label": "AI Score",
+            "format": "percentage",
+            "params": {
+              "suffix": "/100"
+            }
+          },
+          {
+            "path": "riskLevel",
+            "label": "Risk",
+            "format": "enum",
+            "params": {
+              "$ref": "$.metadata.enums.riskLevel"
+            }
+          },
+          {
+            "path": "aiThesis",
+            "label": "AI Thesis",
+            "format": "raw"
+          },
+          {
+            "path": "liquidityUsd",
+            "label": "Liquidity (USDC)",
+            "format": "tokenAmount",
+            "params": {
+              "tokenPath": "@.to",
+              "nativeCurrencyAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "threshold": "0"
             }
           },
           {
@@ -72,7 +112,8 @@
             "label": "Time",
             "format": "date"
           }
-        ]
+        ],
+        "excluded": ["conditionId"]
       }
     }
   }

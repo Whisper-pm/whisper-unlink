@@ -30,10 +30,10 @@
         }
       ],
       "domain": {
-        "name": "Polymarket CTF Exchange",
+        "name": "Polymarket Neg Risk CTF Exchange",
         "version": "1",
         "chainId": 137,
-        "verifyingContract": "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
+        "verifyingContract": "0xC5d563A36AE78145C45a50134d48A1215220f80a"
       },
       "domainSeparator": "0x"
     }
@@ -57,13 +57,13 @@
       }
     },
     "constants": {
-      "exchangeName": "Polymarket CTF Exchange"
+      "exchangeName": "Polymarket Neg Risk Exchange"
     }
   },
   "display": {
     "formats": {
       "Order": {
-        "intent": "Place Prediction Market Trade",
+        "intent": "Multi-Outcome Market Trade",
         "fields": [
           {
             "path": "side",

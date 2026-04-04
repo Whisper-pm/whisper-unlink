@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAppKitAccount } from "@reown/appkit/react";
+import { useWalletClient } from "wagmi";
 import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 import { Feed } from "@/components/Feed";
@@ -11,6 +12,7 @@ import { AgentDashboard } from "@/components/AgentDashboard";
 
 function AppContent() {
   const { address, isConnected } = useAppKitAccount();
+  const { data: walletClient } = useWalletClient();
   const [tab, setTab] = useState<"feed" | "portfolio" | "agents">("feed");
   const [agentCount, setAgentCount] = useState(0);
   const [poolBalance, setPoolBalance] = useState("—");
@@ -119,14 +121,37 @@ function AppContent() {
                 poolBalance={isConnected ? poolBalance : "Connect wallet"}
                 onChainBalance={isConnected ? onChainBalance : "Connect wallet"}
                 onDeposit={async (amt) => {
-                  if (!isConnected) throw new Error("Connect wallet first");
-                  const res = await fetch("/api/deposit", {
+                  if (!isConnected || !walletClient) throw new Error("Connect wallet first");
+                  const amount = String(Math.floor(amt * 1e6));
+
+                  // Step 1: Prepare on server
+                  const prepRes = await fetch("/api/deposit/prepare", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ amount: String(Math.floor(amt * 1e6)), evmAddress: address }),
+                    body: JSON.stringify({ amount, evmAddress: address }),
                   });
-                  const data = await res.json();
-                  if (!data.success) throw new Error(data.error);
+                  const prep = await prepRes.json();
+                  if (!prep.txId) throw new Error(prep.error || "Prepare failed");
+
+                  // Step 2: Sign with MetaMask via Reown
+                  const signature = await walletClient.signTypedData({
+                    domain: prep.typedData.domain,
+                    types: prep.typedData.types,
+                    primaryType: prep.typedData.primaryType,
+                    message: prep.typedData.message,
+                  });
+
+                  // Step 3: Submit signature to server
+                  const submitRes = await fetch("/api/deposit/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ txId: prep.txId, signature, nonce: prep.nonce, deadline: prep.deadline }),
+                  });
+                  const submit = await submitRes.json();
+                  if (!submit.success) throw new Error(submit.error || "Submit failed");
+
+                  // Wait for balance update
+                  await new Promise((r) => setTimeout(r, 5000));
                   fetchBalances();
                 }}
                 onWithdraw={async (amt) => {

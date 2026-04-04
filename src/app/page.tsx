@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useAppKitAccount } from "@reown/appkit/react";
 import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 import { WorldIdGate } from "@/components/WorldIdGate";
@@ -9,20 +10,17 @@ import { DepositPanel } from "@/components/DepositPanel";
 import { Portfolio } from "@/components/Portfolio";
 import { AgentDashboard } from "@/components/AgentDashboard";
 
-// For hackathon demo: private key is passed to server APIs
-// In production: user signs in browser, backend uses session
-const DEMO_PK = "0x47b0a088fc62101d8aefc501edec2266ff2fc4cf84c93a8e6c315dedb0d942be";
-
-export default function Home() {
+function AppContent() {
+  const { address, isConnected } = useAppKitAccount();
   const [nullifier, setNullifier] = useState<string | null>(null);
   const [tab, setTab] = useState<"feed" | "portfolio" | "agents">("feed");
   const [agentCount, setAgentCount] = useState(0);
-  const [poolBalance, setPoolBalance] = useState("...");
-  const [onChainBalance, setOnChainBalance] = useState("...");
+  const [poolBalance, setPoolBalance] = useState("—");
+  const [onChainBalance, setOnChainBalance] = useState("—");
   const [bets, setBets] = useState<Array<{ id: string; market: string; side: "YES" | "NO"; amount: number; odds: string; status: "active" | "won" | "lost" | "pending"; pnl?: number }>>([]);
   const [totalPnl, setTotalPnl] = useState(0);
 
-  // Fetch portfolio from the in-memory store
+  // Fetch portfolio
   const fetchPortfolio = useCallback(async () => {
     if (!nullifier) return;
     try {
@@ -37,13 +35,14 @@ export default function Home() {
     } catch {}
   }, [nullifier]);
 
-  // Fetch real balances from backend
+  // Fetch balances — only if wallet is connected
   const fetchBalances = useCallback(async () => {
+    if (!isConnected || !address) return;
     try {
       const res = await fetch("/api/balances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ evmPrivateKey: DEMO_PK }),
+        body: JSON.stringify({ evmAddress: address }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -51,9 +50,9 @@ export default function Home() {
         setOnChainBalance(data.usdc);
       }
     } catch {}
-  }, []);
+  }, [isConnected, address]);
 
-  // Fetch agent count for tab badge
+  // Fetch agent count
   const fetchAgentCount = useCallback(async () => {
     if (!nullifier) return;
     try {
@@ -65,25 +64,27 @@ export default function Home() {
     } catch {}
   }, [nullifier]);
 
-  // Load balances + portfolio + agent count when verified
+  // Load data when verified + connected
   useEffect(() => {
     if (nullifier) {
-      fetchBalances();
       fetchPortfolio();
       fetchAgentCount();
-      const balanceInterval = setInterval(fetchBalances, 15000);
       const portfolioInterval = setInterval(fetchPortfolio, 10000);
       const agentInterval = setInterval(fetchAgentCount, 15000);
-      return () => {
-        clearInterval(balanceInterval);
-        clearInterval(portfolioInterval);
-        clearInterval(agentInterval);
-      };
+      return () => { clearInterval(portfolioInterval); clearInterval(agentInterval); };
     }
-  }, [nullifier, fetchBalances, fetchPortfolio, fetchAgentCount]);
+  }, [nullifier, fetchPortfolio, fetchAgentCount]);
+
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchBalances();
+      const interval = setInterval(fetchBalances, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [isConnected, address, fetchBalances]);
 
   return (
-    <Providers>
+    <>
       <Header />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {!nullifier ? (
@@ -126,13 +127,14 @@ export default function Home() {
                 </div>
               </div>
               <DepositPanel
-                poolBalance={poolBalance}
-                onChainBalance={onChainBalance}
+                poolBalance={isConnected ? poolBalance : "Connect wallet"}
+                onChainBalance={isConnected ? onChainBalance : "Connect wallet"}
                 onDeposit={async (amt) => {
+                  if (!isConnected) throw new Error("Connect wallet first");
                   const res = await fetch("/api/deposit", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ amount: String(Math.floor(amt * 1e6)), evmPrivateKey: DEMO_PK }),
+                    body: JSON.stringify({ amount: String(Math.floor(amt * 1e6)), evmAddress: address }),
                   });
                   const data = await res.json();
                   if (data.success) {
@@ -143,10 +145,11 @@ export default function Home() {
                   }
                 }}
                 onWithdraw={async (amt) => {
+                  if (!isConnected) throw new Error("Connect wallet first");
                   const res = await fetch("/api/withdraw", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ amount: String(Math.floor(amt * 1e6)), evmPrivateKey: DEMO_PK }),
+                    body: JSON.stringify({ amount: String(Math.floor(amt * 1e6)), evmAddress: address }),
                   });
                   const data = await res.json();
                   if (data.success) {
@@ -161,19 +164,10 @@ export default function Home() {
 
             {tab === "feed" ? (
               <Feed nullifier={nullifier} onBetPlaced={(market, side, amount) => {
-                // Optimistic local update for instant UI feedback
                 setBets((prev) => [
                   ...prev,
-                  {
-                    id: "bet-" + Date.now(),
-                    market: market.substring(0, 60),
-                    side,
-                    amount,
-                    odds: "50%",
-                    status: "active" as const,
-                  },
+                  { id: "bet-" + Date.now(), market: market.substring(0, 60), side, amount, odds: "50%", status: "active" as const },
                 ]);
-                // Then sync with server store
                 fetchPortfolio();
                 fetchBalances();
               }} />
@@ -188,6 +182,14 @@ export default function Home() {
       <footer className="border-t border-gray-800 px-6 py-4 text-center text-xs text-gray-600">
         Whisper &mdash; Privacy by Unlink | Identity by World ID | Signed by Ledger | AI-Curated Feed
       </footer>
+    </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Providers>
+      <AppContent />
     </Providers>
   );
 }

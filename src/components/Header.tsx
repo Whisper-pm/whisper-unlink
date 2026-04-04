@@ -1,12 +1,10 @@
 "use client";
 
-import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 
 export function Header() {
-  const { address, isConnected } = useAccount();
-  const { connect } = useConnect();
-  const { disconnect } = useDisconnect();
+  const { open } = useAppKit();
+  const { address, isConnected } = useAppKitAccount();
 
   return (
     <header className="border-b border-gray-800 px-6 py-4">
@@ -28,14 +26,14 @@ export function Header() {
 
           {isConnected ? (
             <button
-              onClick={() => disconnect()}
+              onClick={() => open()}
               className="bg-gray-800 text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-700 transition"
             >
               {address?.slice(0, 6)}...{address?.slice(-4)}
             </button>
           ) : (
             <button
-              onClick={() => connect({ connector: injected() })}
+              onClick={() => open()}
               className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-200 transition"
             >
               Connect Wallet

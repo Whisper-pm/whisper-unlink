@@ -1,0 +1,17 @@
+{
+  "burners": [
+    {
+      "burnerAddress": "0xecA4CbB4db89C31CF6932D15A5defD6d11666f4a",
+      "createdAt": "2026-04-04T12:22:39.600Z",
+      "parentEvmAddress": "0xf6d3C9Ed2115A5197F96f6189F6D63B51022Fe16",
+      "unlinkAddress": "unlink1qq2m7x5xv23arnadf0kg5cjq6d4577cc6vhwql2msrrf7eruv520f0c6s5zx6qyc65qg7c70xp2t2908psmymvlpz45mnujvsjpjj60mjhf4qu",
+      "market": "TEST: Full flow benchmark",
+      "side": "YES",
+      "amount": "0.1",
+      "status": "funded",
+      "txHashes": {
+        "fundFromPool": "1ace8da9-9870-4f46-80a3-fc1f722d8c2e"
+      }
+    }
+  ]
+}

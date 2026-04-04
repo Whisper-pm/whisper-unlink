@@ -9,12 +9,9 @@ import { Feed } from "@/components/Feed";
 import { DepositPanel } from "@/components/DepositPanel";
 import { Portfolio } from "@/components/Portfolio";
 import { AgentDashboard } from "@/components/AgentDashboard";
-import { useLedgerButton } from "@/lib/useLedgerButton";
-
 function AppContent() {
   const { address, isConnected } = useAppKitAccount();
   const { data: walletClient } = useWalletClient();
-  useLedgerButton(); // Injects Ledger Button as EIP-6963 provider
   const [tab, setTab] = useState<"feed" | "portfolio" | "agents">("feed");
   const [agentCount, setAgentCount] = useState(0);
   const [poolBalance, setPoolBalance] = useState("—");

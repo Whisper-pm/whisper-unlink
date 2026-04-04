@@ -1,6 +1,7 @@
 "use client";
 
 import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { LedgerConnect } from "./LedgerConnect";
 
 export function Header() {
   const { open } = useAppKit();
@@ -24,6 +25,10 @@ export function Header() {
             <span>Polymarket</span>
           </div>
 
+          {/* Ledger direct connect — bypasses Reown, opens Bluetooth/USB */}
+          <LedgerConnect />
+
+          {/* Reown Connect Wallet */}
           {isConnected ? (
             <button
               onClick={() => open()}

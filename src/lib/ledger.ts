@@ -101,8 +101,13 @@ export async function connectLedger(): Promise<DeviceSessionId> {
           // Build signer with our custom ERC-7730 context module
           // This makes the Ledger display prediction market data
           // instead of raw hex during signing
+          const ORIGIN_TOKEN = "1e55ba3959f4543af24809d9066a2120bd2ac9246e626e26a1ff77eb109ca0e5";
+
+          // Build signer with originToken for Clear Signing authorization
+          // The originToken tells the device this app is authorized to display
+          // custom ERC-7730 Clear Signing metadata (AI analysis, market data)
           const contextModule = createWhisperContextModule();
-          signer = new SignerEthBuilder({ dmk: kit, sessionId: session })
+          signer = new SignerEthBuilder({ dmk: kit, sessionId: session, originToken: ORIGIN_TOKEN })
             .withContextModule(contextModule)
             .build();
 

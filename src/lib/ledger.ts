@@ -15,7 +15,7 @@ import {
   type SignerEth,
 } from "@ledgerhq/device-signer-kit-ethereum";
 
-import { createWhisperContextModule } from "./erc7730-context";
+import { ContextModuleBuilder } from "@ledgerhq/context-module";
 import { findDescriptor, resolveDisplayFields } from "@/erc7730";
 
 // Set NEXT_PUBLIC_LEDGER_SPECULOS=true to use Speculos emulator instead of real device
@@ -103,10 +103,17 @@ export async function connectLedger(): Promise<DeviceSessionId> {
           // instead of raw hex during signing
           const ORIGIN_TOKEN = "1e55ba3959f4543af24809d9066a2120bd2ac9246e626e26a1ff77eb109ca0e5";
 
-          // Build signer with originToken for Clear Signing authorization
-          // The originToken tells the device this app is authorized to display
-          // custom ERC-7730 Clear Signing metadata (AI analysis, market data)
-          const contextModule = createWhisperContextModule();
+          // Build context module with originToken + test mode
+          // Test mode accepts descriptors signed with test PKI keys (from our CAL backend)
+          // Production mode would require descriptors signed by Ledger's root key
+          const contextModule = new ContextModuleBuilder({ originToken: ORIGIN_TOKEN })
+            .setCalConfig({
+              url: "https://crypto-assets-service.api.ledger.com/v1",
+              mode: USE_SPECULOS ? "test" : "prod",
+              branch: "main",
+            })
+            .build();
+
           signer = new SignerEthBuilder({ dmk: kit, sessionId: session, originToken: ORIGIN_TOKEN })
             .withContextModule(contextModule)
             .build();

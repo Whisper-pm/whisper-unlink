@@ -69,7 +69,7 @@ export function LedgerInit() {
       const el = document.body.querySelector("ledger-button-app");
       if (el instanceof HTMLElement) {
         el.style.position = "fixed";
-        el.style.top = "25vh";
+        el.style.top = "30vh";
         el.style.left = "0";
         el.style.width = "100vw";
         el.style.height = "75vh";

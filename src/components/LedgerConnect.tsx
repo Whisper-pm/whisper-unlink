@@ -69,10 +69,10 @@ export function LedgerInit() {
       const el = document.body.querySelector("ledger-button-app");
       if (el instanceof HTMLElement) {
         el.style.position = "fixed";
-        el.style.top = "15vh";
+        el.style.top = "25vh";
         el.style.left = "0";
         el.style.width = "100vw";
-        el.style.height = "85vh";
+        el.style.height = "75vh";
         el.style.zIndex = "999999";
         el.style.pointerEvents = "none"; // transparent to clicks when no modal
 

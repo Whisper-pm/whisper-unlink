@@ -15,16 +15,8 @@ export function LedgerConnect() {
     if (typeof window === "undefined" || initialized) return;
 
     import("@ledgerhq/ledger-wallet-provider").then((module) => {
-      // Create a hidden container for the Ledger Button
-      const target = document.createElement("div");
-      target.id = "ledger-button-host";
-      target.style.position = "fixed";
-      target.style.bottom = "-9999px"; // hide the floating button
-      target.style.left = "-9999px";
-      document.body.appendChild(target);
-
       module.initializeLedgerProvider({
-        target,
+        target: document.body,
         floatingButtonPosition: "bottom-right",
         dAppIdentifier: "whisper",
         apiKey: "1e55ba3959f4543af24809d9066a2120bd2ac9246e626e26a1ff77eb109ca0e5",
@@ -37,24 +29,42 @@ export function LedgerConnect() {
   }, [initialized]);
 
   function handleClick() {
-    // Find and click the Ledger floating button to open its native modal
-    const ledgerBtn = document.querySelector(
-      "#ledger-button-host ledger-button-toplevel"
-    ) as HTMLElement | null;
+    // Find the Ledger floating button anywhere in the DOM and click it
+    const selectors = [
+      "ledger-button-toplevel",
+      "[data-testid='ledger-button']",
+      ".ledger-button",
+    ];
 
-    if (ledgerBtn?.shadowRoot) {
-      const inner = ledgerBtn.shadowRoot.querySelector("button, [role='button'], .button") as HTMLElement;
-      if (inner) { inner.click(); return; }
+    for (const sel of selectors) {
+      const el = document.querySelector(sel) as HTMLElement;
+      if (el) {
+        // Try shadow DOM first
+        if (el.shadowRoot) {
+          const btn = el.shadowRoot.querySelector("button") as HTMLElement;
+          if (btn) { btn.click(); return; }
+        }
+        el.click();
+        return;
+      }
     }
 
-    // Fallback: click the top-level element
-    if (ledgerBtn) { ledgerBtn.click(); return; }
+    // Fallback: dispatch EIP-6963 request to trigger wallet announcement
+    window.dispatchEvent(
+      new CustomEvent("eip6963:requestProvider", { bubbles: true })
+    );
 
-    // Last resort: find any ledger button in the DOM
-    const anyLedger = document.querySelector("ledger-button-toplevel") as HTMLElement;
-    if (anyLedger) { anyLedger.click(); return; }
-
-    alert("Ledger Button not ready. Please wait a moment and try again.");
+    // Try again after a tick
+    setTimeout(() => {
+      const el = document.querySelector("ledger-button-toplevel") as HTMLElement;
+      if (el) {
+        if (el.shadowRoot) {
+          const btn = el.shadowRoot.querySelector("button") as HTMLElement;
+          if (btn) { btn.click(); return; }
+        }
+        el.click();
+      }
+    }, 500);
   }
 
   return (

@@ -257,10 +257,12 @@ export async function POST(req: NextRequest) {
     }
     log("cctp:attestation", "done");
 
-    // Relay receiveMessage on Amoy (use the user's wallet as relayer)
+    // Relay receiveMessage + fund gas via dedicated gas tank wallet
     log("cctp:relay", "started");
-    const relayerWallet = createWalletClient({ account, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
-    const receiveTx = await relayerWallet.writeContract({
+    const gasTankAccount = privateKeyToAccount(CONFIG.gasTank.privateKey);
+    const gasTankWallet = createWalletClient({ account: gasTankAccount, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
+
+    const receiveTx = await gasTankWallet.writeContract({
       address: MSG_TRANSMITTER,
       abi: mtAbi,
       functionName: "receiveMessage",
@@ -278,18 +280,17 @@ export async function POST(req: NextRequest) {
 
     // ============================================================
     // STEP 3: BET ON POLYMARKET (Polygon Amoy)
-    // The burner needs MATIC for gas. The relayer sends a tiny amount.
-    // Then: prepareCondition → approve CTF → splitPosition
+    // Gas tank funds the burner with MATIC, then burner bets.
     // ============================================================
 
-    // Fund burner with gas (relayer sends 0.001 MATIC)
-    const burnerMatic = await amoyPub.getBalance({ address: burnerAddress });
-    if (burnerMatic === 0n) {
-      log("gas:fund", "started");
-      const gasTx = await relayerWallet.sendTransaction({ to: burnerAddress, value: 1000000000000000n }); // 0.001 MATIC
-      await amoyPub.waitForTransactionReceipt({ hash: gasTx });
-      log("gas:fund", "done", gasTx);
-    }
+    // Fund burner with gas
+    log("gas:fund", "started");
+    const gasTx = await gasTankWallet.sendTransaction({
+      to: burnerAddress,
+      value: BigInt(CONFIG.gasTank.maticPerBurner),
+    });
+    await amoyPub.waitForTransactionReceipt({ hash: gasTx });
+    log("gas:fund", "done", gasTx);
 
     const burnerAmoyWallet = createWalletClient({ account: burnerAccount, chain: amoyChain, transport: http(CONFIG.chains.polygonAmoy.rpc) });
 

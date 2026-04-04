@@ -11,6 +11,14 @@ export interface MarketAnalysis {
   liquidity: string;
   timeLeft: string;
   recommendation: string;
+  // AI-enriched fields (present when Claude analysis is available)
+  thesis?: string;
+  confidence?: number;
+  aiRecommendation?: "STRONG_YES" | "LEAN_YES" | "NEUTRAL" | "LEAN_NO" | "STRONG_NO";
+  catalysts?: string[];
+  risk_factors?: string[];
+  edge?: string;
+  source?: "claude" | "heuristic";
 }
 
 export interface PolymarketData {
@@ -27,9 +35,18 @@ export interface PolymarketData {
   tokens: Array<{ token_id: string; outcome: string; price: number }>;
 }
 
+export interface MarketSentimentData {
+  conditionId: string;
+  yesCount: number;
+  noCount: number;
+  totalHumans: number;
+  yesPercent: number;
+}
+
 export interface ScoredMarket {
   raw: PolymarketData;
   analysis: MarketAnalysis;
+  sentiment?: MarketSentimentData | null;
 }
 
 function parsePrice(raw: any): number[] {
@@ -77,6 +94,20 @@ export function analyzeMarket(m: PolymarketData): MarketAnalysis {
 }
 
 export async function fetchCuratedFeed(limit = 20): Promise<ScoredMarket[]> {
+  // In browser: use our API route (avoids CORS). On server: call Polymarket directly.
+  const isBrowser = typeof window !== "undefined";
+
+  if (isBrowser) {
+    const res = await fetch(`/api/markets?limit=${limit}`);
+    if (!res.ok) throw new Error("Failed to fetch markets");
+    const data = await res.json();
+    return (data.markets ?? []).map((m: any) => ({
+      raw: { ...m, volume24hr: 0, volume: 0, liquidityNum: 0, spread: 0, active: true } as PolymarketData,
+      analysis: m.analysis as MarketAnalysis,
+      sentiment: (m.sentiment ?? null) as MarketSentimentData | null,
+    }));
+  }
+
   const res = await fetch(`https://gamma-api.polymarket.com/markets?limit=200&active=true&closed=false`);
   if (!res.ok) throw new Error("Failed to fetch markets");
   const raw: PolymarketData[] = await res.json();
